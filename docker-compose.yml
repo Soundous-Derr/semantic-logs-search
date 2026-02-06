@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: ankane/pgvector:latest
+    container_name: semantic-logs-db
+    environment:
+      POSTGRES_USER: logadmin
+      POSTGRES_PASSWORD: logsearch2024
+      POSTGRES_DB: semantic_logs
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logadmin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
