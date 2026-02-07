@@ -1,6 +1,5 @@
 """
 Pipeline Principal - Orchestre toutes les phases
-Exécutez avec: python main.py
 """
 
 import os
@@ -11,12 +10,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime
 
-# Import des phases
-from src.data_exploration import DataExploration
-from src.spark_pipeline import SparkLogsPipeline
-from src.vectorization import VectorizationPipeline
-from src.semantic_search import SemanticSearchEngine
-
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -26,8 +19,7 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 class MainPipeline:
-    def __init__(self, phase=None):
-        self.phase = phase
+    def __init__(self):
         self.data_raw = Path("data/raw/sample_logs.txt")
         self.data_processed = Path("data/processed_logs")
     
@@ -39,7 +31,6 @@ class MainPipeline:
         
         if not self.data_raw.exists():
             print(f"✗ Fichier de données manquant: {self.data_raw}")
-            print("  Lancez: python download_data.py")
             return False
         
         print(f"✓ Données trouvées: {self.data_raw}")
@@ -47,13 +38,14 @@ class MainPipeline:
         try:
             import psycopg2
             conn = psycopg2.connect(
-                host=os.getenv('DB_HOST', 'localhost'),
+                host=os.getenv('DB_HOST', '172.17.22.69'),
                 user=os.getenv('DB_USER', 'logadmin'),
                 password=os.getenv('DB_PASSWORD', 'logsearch2024'),
-                database='postgres'
+                database='semantic_logs',
+                port='5432'
             )
             conn.close()
-            print("✓ PostgreSQL + pgvector opérationnel")
+            print("✓ PostgreSQL accessible")
         except Exception as e:
             print(f"✗ Erreur PostgreSQL: {e}")
             return False
@@ -62,39 +54,78 @@ class MainPipeline:
     
     def run_phase_1(self):
         """Phase 1: Exploration des données"""
+        from src.data_exploration import DataExploration
+        
         print("\n" + "="*70)
         print("📊 PHASE 1: EXPLORATION DES DONNÉES")
         print("="*70)
         
         explorer = DataExploration(str(self.data_raw))
-        explorer.generate_report()
-        
+        stats = explorer.generate_report()
         return True
     
     def run_phase_2(self):
-        """Phase 2: Ingestion et traitement Spark"""
+        """Phase 2: Traitement Spark avec Hadoop"""
+        import os
+        import sys
+        
+        # Configuration
+        java_path = r"C:\Program Files\Eclipse Adoptium\jdk-17.0.16.8-hotspot"
+        os.environ['JAVA_HOME'] = java_path
+        os.environ['HADOOP_HOME'] = r"C:\hadoop"
+        os.environ['PYSPARK_PYTHON'] = sys.executable
+        os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
+        
+        import findspark
+        findspark.init()
+        
+        from pyspark.sql import SparkSession
+        from pyspark.sql.functions import regexp_extract, col
+        
         print("\n" + "="*70)
         print("🚀 PHASE 2: INGESTION ET TRAITEMENT SPARK")
         print("="*70)
         
-        pipeline = SparkLogsPipeline()
-        df = pipeline.run_full_pipeline(
-            str(self.data_raw),
-            str(self.data_processed)
-        )
+        spark = SparkSession.builder \
+            .appName("SemanticLogs") \
+            .master("local[*]") \
+            .getOrCreate()
         
+        # Lecture
+        df = spark.read.text("data/raw/sample_logs.txt")
+        print(f"✓ {df.count():,} logs chargés")
+        
+        # Parsing
+        df = df.withColumn("timestamp", regexp_extract(col("value"), r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})", 1)) \
+               .withColumn("level", regexp_extract(col("value"), r"\[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\]", 1))
+        
+        # Aperçu
+        print("\n📊 Aperçu:")
+        df.show(5, truncate=False)
+        
+        print("\n📈 Distribution:")
+        df.groupBy("level").count().orderBy(col("count").desc()).show()
+        
+        # Sauvegarde Parquet
+        os.makedirs("data/processed", exist_ok=True)
+        df.write.mode("overwrite").parquet("data/processed/logs_parsed")
+        
+        print("\n💾 Données sauvegardées: data/processed/logs_parsed")
+        spark.stop()
+        print("✅ Phase 2 terminée avec succès!")
         return True
-    
+
     def run_phase_3(self):
         """Phase 3: Vectorisation"""
+        from src.vectorization import VectorizationPipeline
+        
         print("\n" + "="*70)
         print("🔢 PHASE 3: VECTORISATION ET INDEXATION")
         print("="*70)
         
         pipeline = VectorizationPipeline()
-        pipeline.run(str(self.data_processed))
-        
-        return True
+        # Utiliser le bon chemin
+        return pipeline.run("data/processed/logs_parsed")
     
     def run_phase_4(self):
         """Phase 4: Recherche et analyse"""
@@ -104,12 +135,10 @@ class MainPipeline:
         
         from src.semantic_search import run_demo
         run_demo()
-        
         return True
     
     def run_all_phases(self):
         """Exécute toutes les phases"""
-        
         start_time = datetime.now()
         
         try:
@@ -118,10 +147,10 @@ class MainPipeline:
                 return False
             
             phases = [
-                ("Phase 1", self.run_phase_1),
-                ("Phase 2", self.run_phase_2),
-                ("Phase 3", self.run_phase_3),
-                ("Phase 4", self.run_phase_4),
+                ("Phase 1: Exploration", self.run_phase_1),
+                ("Phase 2: Traitement Spark", self.run_phase_2),
+                ("Phase 3: Vectorisation", self.run_phase_3),
+                ("Phase 4: Recherche", self.run_phase_4),
             ]
             
             for phase_name, phase_func in phases:
@@ -129,7 +158,10 @@ class MainPipeline:
                     print(f"\n{'='*70}")
                     print(f"▶️  {phase_name}")
                     print(f"{'='*70}")
-                    phase_func()
+                    success = phase_func()
+                    if not success:
+                        logger.error(f"❌ Échec de {phase_name}")
+                        return False
                 except Exception as e:
                     logger.error(f"❌ Erreur dans {phase_name}: {e}")
                     import traceback
@@ -154,7 +186,6 @@ class MainPipeline:
     
     def run_specific_phase(self, phase_num):
         """Exécute une phase spécifique"""
-        
         phases = {
             1: self.run_phase_1,
             2: self.run_phase_2,
@@ -169,7 +200,6 @@ class MainPipeline:
         try:
             if not self.validate_environment():
                 return False
-            
             return phases[phase_num]()
         except Exception as e:
             logger.error(f"Erreur: {e}")
@@ -188,19 +218,10 @@ def main():
         choices=[1, 2, 3, 4],
         help='Exécuter une phase spécifique (1, 2, 3, ou 4)'
     )
-    parser.add_argument(
-        '--setup-only',
-        action='store_true',
-        help='Seulement vérifier la configuration'
-    )
     
     args = parser.parse_args()
     
     pipeline = MainPipeline()
-    
-    if args.setup_only:
-        success = pipeline.validate_environment()
-        sys.exit(0 if success else 1)
     
     if args.phase:
         success = pipeline.run_specific_phase(args.phase)

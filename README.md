@@ -1,33 +1,14 @@
 # 🚀 Moteur de Recherche Sémantique et Analytique sur Logs Big Data
 
-**TP Avancé - Module Bases de Données Avancées**
-
-![Status](https://img.shields.io/badge/status-Functional-brightgreen)
-![Python](https://img.shields.io/badge/python-3.10-blue)
-![Spark](https://img.shields.io/badge/spark-3.5-blue)
-![PostgreSQL](https://img.shields.io/badge/postgresql-15-blue)
+**TP Avancé - Architecture Big Data avec Spark, PostgreSQL/pgvector et Sentence-Transformers**
 
 ## 🎯 Objectifs
 
-✅ Ingérer 500K+ logs massifs  
-✅ Vectoriser avec Sentence-Transformers  
-✅ Stocker dans PostgreSQL + pgvector  
-✅ Recherche sémantique rapide  
-✅ Analyser automatiquement les patterns  
+- ✅ Ingérer 500K+ logs massifs avec Apache Spark
+- ✅ Vectoriser avec Sentence-Transformers (embeddings 384-dim)
+- ✅ Stocker dans PostgreSQL + pgvector (index IVFFlat)
+- ✅ Recherche sémantique rapide (similarité cosinus)
+- ✅ Détection de clusters d'erreurs (K-Means)
+- ✅ Analyse temporelle des patterns
 
-## 🚀 Quick Start
-
-```bash
-# 1. Clone & Setup
-git clone https://github.com/Soundous-Derr/semantic-logs-search.git
-cd semantic-logs-search
-
-# 2. Installation
-chmod +x setup.sh
-./setup.sh
-
-# 3. Données
-python download_data.py
-
-# 4. Pipeline
-python main.py
+## 🏗️ Architecture

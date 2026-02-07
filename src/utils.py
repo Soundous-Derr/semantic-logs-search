@@ -4,9 +4,10 @@ Utilitaires communs pour tout le pipeline
 
 import logging
 import json
+import re
 from datetime import datetime
 from typing import List, Dict, Any
-import re
+import numpy as np
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,6 +20,8 @@ def get_logger(name: str) -> logging.Logger:
 
 def normalize_log(log: str) -> str:
     """Normalise un log pour le traitement"""
+    if not log:
+        return ""
     log = log.strip()
     log = ' '.join(log.split())
     return log
@@ -52,13 +55,6 @@ def extract_ip_address(log: str) -> str:
     match = re.search(pattern, log)
     return match.group(0) if match else None
 
-def extract_error_message(log: str) -> str:
-    """Extrait le message d'erreur principal"""
-    match = re.search(r'(?:Error|Exception|Failed)[:=\s]+([^,\n]+)', log)
-    if match:
-        return match.group(1).strip()[:200]
-    return log[:200]
-
 def save_json(data: Any, filepath: str) -> None:
     """Sauvegarde des données en JSON"""
     with open(filepath, 'w') as f:
@@ -77,8 +73,6 @@ def batch_generator(items: List, batch_size: int):
 
 def calculate_similarity_metrics(vector1: List[float], vector2: List[float]) -> Dict[str, float]:
     """Calcule les métriques de similarité entre deux vecteurs"""
-    import numpy as np
-    
     v1 = np.array(vector1)
     v2 = np.array(vector2)
     

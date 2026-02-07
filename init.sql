@@ -29,20 +29,9 @@ CREATE TABLE IF NOT EXISTS error_clusters (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS log_cluster_membership (
-    id SERIAL PRIMARY KEY,
-    log_id INTEGER NOT NULL,
-    cluster_id INTEGER NOT NULL,
-    similarity_score FLOAT,
-    FOREIGN KEY (log_id) REFERENCES logs(id),
-    FOREIGN KEY (cluster_id) REFERENCES error_clusters(id)
-);
-
 CREATE INDEX idx_logs_level ON logs(log_level);
 CREATE INDEX idx_logs_timestamp ON logs(timestamp);
-CREATE INDEX idx_logs_indexed ON logs(indexed);
 CREATE INDEX idx_embeddings_log ON log_embeddings(log_id);
-
 CREATE INDEX idx_embeddings_vector ON log_embeddings USING ivfflat (embedding vector_cosine_ops);
 
 CREATE OR REPLACE VIEW logs_with_embeddings AS

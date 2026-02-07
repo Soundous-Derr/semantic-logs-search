@@ -10,6 +10,7 @@ import re
 from collections import Counter
 from datetime import datetime
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 class DataExploration:
     def __init__(self, log_file_path):
@@ -28,7 +29,7 @@ class DataExploration:
             else:
                 self.logs = lines
                 
-            print(f"✓ Chargement: {len(self.logs)} logs")
+            print(f"✓ Chargement: {len(self.logs):,} logs")
             return self.logs
         except Exception as e:
             print(f"✗ Erreur lors du chargement: {e}")
@@ -46,19 +47,15 @@ class DataExploration:
             print(f"{i}. {log.strip()[:100]}...")
         
         # Détection du format
-        format_types = {
-            'apache': 0,
-            'syslog': 0,
-            'json': 0,
-            'text_libre': 0
-        }
+        format_types = {'apache': 0, 'syslog': 0, 'json': 0, 'text_libre': 0}
         
-        for log in self.logs[:1000]:
-            if 'HTTP' in log or log[0].isdigit() and '.' in log:
+        for log in self.logs[:min(1000, len(self.logs))]:
+            log_str = str(log)
+            if 'HTTP' in log_str or (len(log_str) > 0 and log_str[0].isdigit() and '.' in log_str):
                 format_types['apache'] += 1
-            elif '[' in log and ']' in log:
+            elif '[' in log_str and ']' in log_str:
                 format_types['syslog'] += 1
-            elif log.startswith('{'):
+            elif log_str.startswith('{'):
                 format_types['json'] += 1
             else:
                 format_types['text_libre'] += 1
@@ -107,11 +104,12 @@ class DataExploration:
         print("="*60)
         
         error_keywords = ['error', 'exception', 'failed', 'critical', 'warning', 
-                         'ERROR', 'FATAL', 'Exception', 'timeout']
+                         'ERROR', 'FATAL', 'Exception', 'timeout', 'refused']
         
         error_logs = []
         for log in self.logs:
-            if any(keyword.lower() in log.lower() for keyword in error_keywords):
+            log_lower = log.lower()
+            if any(keyword.lower() in log_lower for keyword in error_keywords):
                 error_logs.append(log)
         
         error_rate = (len(error_logs) / len(self.logs) * 100) if self.logs else 0
@@ -122,8 +120,8 @@ class DataExploration:
         if error_logs:
             print(f"\n   Top 5 erreurs détectées:")
             error_counter = Counter()
-            for log in error_logs:
-                match = re.search(r'(Error|Exception|Failed).*?:', log)
+            for log in error_logs[:1000]:
+                match = re.search(r'(Error|Exception|Failed|ERROR|CRITICAL).*?:', log)
                 if match:
                     error_counter[match.group(0)] += 1
             
@@ -141,15 +139,21 @@ class DataExploration:
         print("="*60)
         
         timestamps = []
-        date_pattern = r'\d{4}-\d{2}-\d{2}|\d{2}/\w+/\d{4}'
+        date_patterns = [
+            r'\d{4}-\d{2}-\d{2}',
+            r'\d{2}/\w+/\d{4}',
+            r'\d{2}-\d{2}-\d{4}'
+        ]
         
-        for log in self.logs[:10000]:
-            match = re.search(date_pattern, log)
-            if match:
-                timestamps.append(match.group(0))
+        for log in self.logs[:min(10000, len(self.logs))]:
+            for pattern in date_patterns:
+                match = re.search(pattern, log)
+                if match:
+                    timestamps.append(match.group(0))
+                    break
         
         if timestamps:
-            print(f"\n📅 Timestamps trouvés: {len(timestamps)} / {min(10000, len(self.logs))}")
+            print(f"\n📅 Timestamps trouvés: {len(timestamps)}")
             print(f"   Période: {timestamps[0]} à {timestamps[-1]}")
         else:
             print(f"\n📅 Aucun timestamp détecté dans le format standard")
@@ -161,7 +165,7 @@ class DataExploration:
         print("="*60)
         
         words = []
-        for log in self.logs[:10000]:
+        for log in self.logs[:min(10000, len(self.logs))]:
             log_words = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', log)
             words.extend(log_words)
         
@@ -170,7 +174,7 @@ class DataExploration:
         print(f"\n📝 Résultats:")
         print(f"   Vocabulaire unique: {vocab_size:,} mots")
         print(f"   Total mots: {len(words):,}")
-        print(f"   Densité: {vocab_size/len(words)*100:.2f}%")
+        print(f"   Densité: {vocab_size/len(words)*100:.2f}%" if words else "   N/A")
         
         print(f"\n   Top 10 mots les plus fréquents:")
         word_counter = Counter(words)
@@ -215,9 +219,13 @@ class DataExploration:
 
 
 if __name__ == "__main__":
+    # Créer le dossier data/raw si nécessaire
+    Path("data/raw").mkdir(parents=True, exist_ok=True)
+    
     explorer = DataExploration("data/raw/sample_logs.txt")
     stats = explorer.generate_report()
     
+    Path("data").mkdir(exist_ok=True)
     with open("data/analysis_stats.json", 'w') as f:
         json.dump(stats, f, indent=2)
     print("\n✓ Statistiques sauvegardées dans data/analysis_stats.json")

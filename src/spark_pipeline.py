@@ -1,3 +1,4 @@
+
 """
 Phase 2: Pipeline Spark pour ingestion et traitement massif
 """
@@ -16,11 +17,13 @@ class SparkLogsPipeline:
     def __init__(self, app_name="Semantic-Logs-Pipeline"):
         self.spark = SparkSession.builder \
             .appName(app_name) \
-            .config("spark.executor.memory", "4g") \
+            .config("spark.executor.memory", "2g") \
             .config("spark.driver.memory", "2g") \
-            .config("spark.sql.shuffle.partitions", 200) \
+            .config("spark.sql.shuffle.partitions", "100") \
+            .config("spark.sql.adaptive.enabled", "true") \
             .getOrCreate()
         
+        self.spark.sparkContext.setLogLevel("WARN")
         logger.info("✓ Spark Session créée")
     
     def load_logs(self, input_path: str, sample_fraction: float = 1.0):
@@ -34,7 +37,8 @@ class SparkLogsPipeline:
             if sample_fraction < 1.0:
                 df = df.sample(fraction=sample_fraction, seed=42)
             
-            print(f"✓ {df.count():,} logs chargés")
+            count = df.count()
+            print(f"✓ {count:,} logs chargés")
             return df
         except Exception as e:
             logger.error(f"✗ Erreur lors du chargement: {e}")
@@ -43,6 +47,7 @@ class SparkLogsPipeline:
     def normalize_logs(self, df):
         """Normalise les logs"""
         
+        @udf(StringType())
         def normalize(text):
             if text is None:
                 return None
@@ -50,25 +55,34 @@ class SparkLogsPipeline:
             text = text.lower()
             return text
         
-        normalize_udf = udf(normalize, StringType())
-        df = df.withColumn("normalized_text", normalize_udf(col("original_text")))
+        df = df.withColumn("normalized_text", normalize(col("original_text")))
         return df
     
     def extract_log_metadata(self, df):
         """Extrait les métadonnées des logs"""
         
+        @udf(StringType())
         def extract_level(text):
+            if not text:
+                return 'UNKNOWN'
             levels = ['critical', 'error', 'warning', 'info', 'debug']
+            text_lower = text.lower()
             for level in levels:
-                if f'[{level}]' in text or f' {level} ' in text:
+                if f'[{level}]' in text_lower or f' {level} ' in text_lower:
                     return level.upper()
             return 'UNKNOWN'
         
+        @udf(StringType())
         def extract_ip(text):
+            if not text:
+                return None
             match = re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', text)
             return match.group(0) if match else None
         
+        @udf(StringType())
         def extract_timestamp(text):
+            if not text:
+                return None
             patterns = [
                 r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})',
                 r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})',
@@ -80,13 +94,9 @@ class SparkLogsPipeline:
                     return match.group(1)
             return None
         
-        level_udf = udf(extract_level, StringType())
-        ip_udf = udf(extract_ip, StringType())
-        timestamp_udf = udf(extract_timestamp, StringType())
-        
-        df = df.withColumn("log_level", level_udf(col("normalized_text")))
-        df = df.withColumn("source_ip", ip_udf(col("normalized_text")))
-        df = df.withColumn("timestamp_str", timestamp_udf(col("normalized_text")))
+        df = df.withColumn("log_level", extract_level(col("normalized_text")))
+        df = df.withColumn("source_ip", extract_ip(col("normalized_text")))
+        df = df.withColumn("timestamp_str", extract_timestamp(col("normalized_text")))
         
         return df
     
@@ -97,7 +107,8 @@ class SparkLogsPipeline:
         final_count = df.count()
         
         removed = initial_count - final_count
-        print(f"✓ Doublons supprimés: {removed:,} ({removed/initial_count*100:.1f}%)")
+        if initial_count > 0:
+            print(f"✓ Doublons supprimés: {removed:,} ({removed/initial_count*100:.1f}%)")
         
         return df
     
@@ -108,9 +119,7 @@ class SparkLogsPipeline:
     
     def add_processing_metadata(self, df):
         """Ajoute les métadonnées de traitement"""
-        from datetime import datetime
-        
-        df = df.withColumn("processed_at", lit(datetime.now()))
+        df = df.withColumn("processed_at", current_timestamp())
         df = df.withColumn("log_length", length(col("original_text")))
         df = df.withColumn("word_count", size(split(col("normalized_text"), " ")))
         
@@ -136,6 +145,10 @@ class SparkLogsPipeline:
         print("\n📥 Chargement des logs...")
         df = self.load_logs(input_path)
         
+        if df is None:
+            logger.error("Échec du chargement des logs")
+            return None
+        
         print("🧹 Normalisation...")
         df = self.normalize_logs(df)
         
@@ -155,15 +168,18 @@ class SparkLogsPipeline:
         df = self.partition_data(df)
         
         print("\n📈 Statistiques finales:")
-        print(f"  Total logs: {df.count():,}")
-        df.groupBy("log_level").count().show()
+        final_count = df.count()
+        print(f"  Total logs: {final_count:,}")
+        
+        if final_count > 0:
+            df.groupBy("log_level").count().orderBy(desc("count")).show()
         
         print(f"\n💾 Sauvegarde en Parquet...")
         self.save_parquet(df, output_path)
         
         return df
-
-
-if __name__ == "__main__":
-    pipeline = SparkLogsPipeline()
-    pipeline.run_full_pipeline("data/raw/sample_logs.txt", "data/processed_logs")
+    
+    def stop(self):
+        """Arrête la session Spark"""
+        self.spark.stop()
+        logger.info("✓ Spark Session arrêtée")
