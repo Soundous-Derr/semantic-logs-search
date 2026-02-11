@@ -59,16 +59,48 @@ class SemanticSearchEngine:
             # Parser le format vector de PostgreSQL
             embeddings = []
             for row in results:
-                emb_str = row[1]
-                if isinstance(emb_str, str):
-                    emb_str = emb_str.strip('[]')
-                    emb = [float(x) for x in emb_str.split(',')]
-                    embeddings.append(emb)
+                emb_val = row[1]
+                try:
+                    # cas: embedding stocké en BYTEA (pickle)
+                    import pickle
+                    if isinstance(emb_val, (bytes, bytearray, memoryview)):
+                        b = bytes(emb_val)
+                        emb = pickle.loads(b)
+                        embeddings.append(np.array(emb, dtype=float))
+                    # cas: embedding stocké en texte '[0.1, 0.2, ...]'
+                    elif isinstance(emb_val, str):
+                        s = emb_val.strip('[]')
+                        if s:
+                            emb = [float(x) for x in s.split(',') if x.strip()]
+                            embeddings.append(np.array(emb, dtype=float))
+                    else:
+                        # type inconnu, tenter de convertir
+                        try:
+                            emb = np.array(emb_val, dtype=float)
+                            if emb.ndim == 1:
+                                embeddings.append(emb)
+                        except Exception:
+                            continue
+                except Exception:
+                    # ignorer les embeddings malformés
+                    continue
             
-            embeddings = np.array(embeddings)
-            
-            kmeans = KMeans(n_clusters=min(n_clusters, len(results)), random_state=42, n_init=10)
-            labels = kmeans.fit_predict(embeddings)
+            if not embeddings:
+                logger.warning("Aucun embedding valide pour le clustering")
+                return {}
+
+            embeddings = np.vstack(embeddings)
+            if embeddings.ndim != 2 or embeddings.shape[0] < 1:
+                logger.warning("Embeddings invalides pour le clustering")
+                return {}
+
+            n_clusters_use = min(n_clusters, embeddings.shape[0])
+            try:
+                kmeans = KMeans(n_clusters=n_clusters_use, random_state=42, n_init=10)
+                labels = kmeans.fit_predict(embeddings)
+            except Exception as e:
+                logger.error(f"Erreur KMeans: {e}")
+                return {}
             
             clusters = {}
             for cluster_id in range(len(set(labels))):

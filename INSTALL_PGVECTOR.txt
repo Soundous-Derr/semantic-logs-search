@@ -1,0 +1,151 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║                    INSTALLATION DE PGVECTOR - 3 SOLUTIONS                 ║
+║                                                                            ║
+║         pgvector est requis pour le TP: Recherche Sémantique             ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+
+🎯 OBJECTIF: Installer l'extension PostgreSQL 'vector' pour les embeddings
+
+
+════════════════════════════════════════════════════════════════════════════════
+SOLUTION 1 ⭐ RECOMMANDÉE - Installation via pgAdmin GUI (5 minutes)
+════════════════════════════════════════════════════════════════════════════════
+
+C'est la solution la plus simple sur Windows.
+
+Étapes:
+  1. Ouvrir pgAdmin 4
+  2. Dans le menu: Tools → Extensions
+  3. Chercher "vector"
+  4. Cliquer sur Install
+  5. Redémarrer PostgreSQL si demandé
+
+Ou manuellement via SQL:
+  1. Ouvrir pgAdmin 4
+  2. Aller à: Databases → semantic_logs → Query Tool
+  3. Copier-coller:
+  
+     CREATE EXTENSION IF NOT EXISTS vector;
+  
+  4. Exécuter (F5 ou bouton Run)
+
+Vérification:
+  SELECT * FROM pg_extension WHERE extname = 'vector';
+  → Si aucun résultat, l'extension n'est pas installée
+
+
+════════════════════════════════════════════════════════════════════════════════
+SOLUTION 2 - Script PowerShell Automatisé (10 minutes)
+════════════════════════════════════════════════════════════════════════════════
+
+Prérequis:
+  ✓ Visual Studio Build Tools (C++ compiler)
+  ✓ Git installé
+  ✓ PostgreSQL 17
+
+Commande:
+  
+  powershell.exe -ExecutionPolicy Bypass -File install_pgvector.ps1
+
+Cette solution compile pgvector depuis les sources.
+
+Télécharger Visual Studio Build Tools:
+  https://visualstudio.microsoft.com/downloads/
+  → Community (gratuit) → Desktop development with C++
+
+
+════════════════════════════════════════════════════════════════════════════════
+SOLUTION 3 - Script Python (Alternative: sans pgvector)
+════════════════════════════════════════════════════════════════════════════════
+
+Si pgvector n'est vraiment pas installable:
+
+  python install_pgvector.py
+
+Cet outil:
+  1. Essaie de télécharger les binaires pgvector
+  2. Les installe dans PostgreSQL 17
+  3. Active l'extension automatiquement
+
+OU utilise une base de données alternative (src/database_alternative.py)
+qui stocke les embeddings en format binaire compressé.
+
+
+════════════════════════════════════════════════════════════════════════════════
+📋 VÉRIFICATION APRÈS INSTALLATION
+════════════════════════════════════════════════════════════════════════════════
+
+Pour vérifier que pgvector est bien installé:
+
+Option 1 - Avec psql:
+  "C:\Program Files\PostgreSQL\17\bin\psql.exe" -U postgres
+  
+  \dx vector
+  
+  Output:
+    List of installed extensions
+     Name | Version | Schema |    Description
+    ------+---------+--------+---------------------
+     vector | 0.7.4  | public | vector data type
+
+Option 2 - Avec pgAdmin:
+  Clic droit sur semantic_logs → Properties → Extensions
+  Chercher "vector" dans la liste
+
+Option 3 - Avec le script de démo:
+  python check_status.py
+  
+  Affichera:
+    ✅ pgvector installé: Oui
+
+
+════════════════════════════════════════════════════════════════════════════════
+🔧 DÉPANNAGE
+════════════════════════════════════════════════════════════════════════════════
+
+Erreur: "extension 'vector' n'existe pas"
+  → Solution 1: pgAdmin GUI (le plus rapide)
+  → Solution 2: Script PowerShell
+  → Solution 3: Script Python
+
+Erreur: "pg_config not found"
+  → Ajouter PostgreSQL au PATH:
+  → Control Panel → System → Environment Variables
+  → Ajouter: C:\Program Files\PostgreSQL\17\bin
+
+Erreur: "permission denied"
+  → Redémarrer PostgreSQL en tant qu'admin
+  → Ou accorder les droits à l'utilisateur postgres
+
+
+════════════════════════════════════════════════════════════════════════════════
+✅ APRÈS INSTALLATION
+════════════════════════════════════════════════════════════════════════════════
+
+Une fois pgvector installé:
+
+1. Relancer le script de setup:
+   python SETUP_AND_RUN.py
+
+2. Ou lancer les phases manuellement:
+   python main.py --phase 1  # Exploration
+   python main.py --phase 2  # Ingestion Spark
+   python main.py --phase 3  # Vectorisation + pgvector
+   python main.py --phase 4  # Recherche sémantique
+
+3. Puis la démo:
+   python demo_simple.py
+
+
+════════════════════════════════════════════════════════════════════════════════
+
+                    👉 COMMENCEZ PAR LA SOLUTION 1 (GUI)
+                    
+         C'est la plus rapide: 5 minutes maximum!
+         
+         Ouvrir pgAdmin → Tools → Extensions → Installer "vector"
+
+════════════════════════════════════════════════════════════════════════════════

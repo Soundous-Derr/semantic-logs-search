@@ -6,6 +6,7 @@ import os
 import sys
 import argparse
 import logging
+import subprocess
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime
@@ -19,9 +20,11 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 class MainPipeline:
-    def __init__(self):
+    def __init__(self, sample: bool = False):
         self.data_raw = Path("data/raw/sample_logs.txt")
-        self.data_processed = Path("data/processed_logs")
+        self.data_processed = Path("data/processed/logs_parsed")
+        self.sample = sample
+        self.sample_parquet = Path("data/processed/logs_parsed_sample")
     
     def validate_environment(self):
         """Vérifie que tout est prêt"""
@@ -38,9 +41,9 @@ class MainPipeline:
         try:
             import psycopg2
             conn = psycopg2.connect(
-                host=os.getenv('DB_HOST', '172.17.22.69'),
-                user=os.getenv('DB_USER', 'logadmin'),
-                password=os.getenv('DB_PASSWORD', 'logsearch2024'),
+                host=os.getenv('DB_HOST', 'localhost'),
+                user=os.getenv('DB_USER', 'postgres'),
+                password=os.getenv('DB_PASSWORD', 'sound2003'),
                 database='semantic_logs',
                 port='5432'
             )
@@ -124,8 +127,9 @@ class MainPipeline:
         print("="*70)
         
         pipeline = VectorizationPipeline()
-        # Utiliser le bon chemin
-        return pipeline.run("data/processed/logs_parsed")
+        # Utiliser le bon chemin (échantillon si demandé)
+        parquet_path = str(self.sample_parquet) if self.sample else str(self.data_processed)
+        return pipeline.run(parquet_path)
     
     def run_phase_4(self):
         """Phase 4: Recherche et analyse"""
@@ -162,6 +166,15 @@ class MainPipeline:
                     if not success:
                         logger.error(f"❌ Échec de {phase_name}")
                         return False
+                    # Après la Phase 2, créer un parquet échantillon si demandé
+                    if success and phase_name.startswith("Phase 2") and self.sample:
+                        try:
+                            print("\n⏳ Création d'un parquet échantillon pour accélérer la vectorisation...")
+                            # utiliser le Python courant pour exécuter le créateur d'échantillon
+                            subprocess.run([sys.executable, "create_sample_parquet.py"], check=True)
+                            print("✅ Parquet échantillon créé: data/processed/logs_parsed_sample")
+                        except Exception as e:
+                            logger.warning(f"⚠️  Échec création du parquet échantillon: {e}")
                 except Exception as e:
                     logger.error(f"❌ Erreur dans {phase_name}: {e}")
                     import traceback
@@ -218,10 +231,15 @@ def main():
         choices=[1, 2, 3, 4],
         help='Exécuter une phase spécifique (1, 2, 3, ou 4)'
     )
+    parser.add_argument(
+        '--sample',
+        action='store_true',
+        help='Use a sampled parquet for faster vectorization (creates/uses data/processed/logs_parsed_sample)'
+    )
     
     args = parser.parse_args()
-    
-    pipeline = MainPipeline()
+
+    pipeline = MainPipeline(sample=getattr(args, 'sample', False))
     
     if args.phase:
         success = pipeline.run_specific_phase(args.phase)
