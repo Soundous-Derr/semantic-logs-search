@@ -122,7 +122,7 @@ class SemanticSearchEngine:
             logger.error(f"Erreur clustering: {e}")
             return {}
     
-    def temporal_analysis(self, error_pattern: str, timeframe_days: int = 7) -> Dict:
+    def analyze_temporal_evolution(self, error_pattern: str, days: int = 7) -> Dict:
         """Cas d'usage 3: Analyser l'évolution temporelle des erreurs similaires"""
         print(f"\n📅 Analyse temporelle pour: '{error_pattern}'")
         
@@ -150,6 +150,31 @@ class SemanticSearchEngine:
             print(f"  {date}: {count} erreurs")
         
         return sorted_data
+    
+    def search_by_keyword(self, query: str, top_k: int = 10) -> List[Dict]:
+        """Cas d'usage 4 (partie): Recherche simple par mots-clés"""
+        print(f"\n🔎 Recherche par mot-clé: '{query}'")
+        
+        keyword_query = f"%{query.lower()}%"
+        self.db.cursor.execute("""
+            SELECT id, original_text, log_level, timestamp
+            FROM logs
+            WHERE normalized_text LIKE %s
+            LIMIT %s
+        """, (keyword_query, top_k))
+        
+        keyword_results = []
+        for row in self.db.cursor.fetchall():
+            keyword_results.append({
+                'id': row[0],
+                'text': row[1],
+                'log_level': row[2],
+                'timestamp': row[3],
+                'similarity': 1.0  # Mot-clé trouvé = 100% de match
+            })
+        
+        print(f"✓ {len(keyword_results)} résultats trouvés par mot-clé")
+        return keyword_results
     
     def compare_with_keyword_search(self, query: str, top_k: int = 10) -> Dict:
         """Compare recherche sémantique vs recherche par mots-clés"""
@@ -216,7 +241,7 @@ def run_demo():
         print("\n" + "-"*70)
         print("📌 CAS 3: Analyser l'évolution des erreurs")
         print("-"*70)
-        engine.temporal_analysis("connection error", timeframe_days=7)
+        engine.analyze_temporal_evolution("connection error", days=7)
         
         print("\n" + "-"*70)
         print("📌 CAS 4: Comparer recherche sémantique vs mot-clé")
